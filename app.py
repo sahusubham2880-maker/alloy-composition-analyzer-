@@ -10,12 +10,18 @@ st.set_page_config(
     page_icon="⚙️",
     layout="wide"
 )
-
 st.title("⚙️ Alloy Composition Analyzer")
+
+st.markdown("""
+**Developed by:** Subham Sahu  
+**B.Tech 4th Year | Metallurgical & Materials Engineering | IGIT Sarang**
+""")
+
 st.write(
     "Select a material type and grade, enter the chemical composition, "
     "then click Analyze."
 )
+
 
 # =========================================================
 # GRADE DATABASE
