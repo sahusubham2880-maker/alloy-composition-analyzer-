@@ -1,51 +1,76 @@
 import streamlit as st
 
-from PIL import Image
-
-# Load trained model
-
-
-st.set_page_config(page_title="Billet Defect Detector", page_icon="🔍")
-
-st.title("🔍 Continuous Casting Billet Defect Detector")
-st.write("Upload a billet surface image to detect defects.")
-
-uploaded_file = st.file_uploader(
-    "Upload Billet Image",
-    type=["jpg", "jpeg", "png", "bmp"]
+st.set_page_config(
+    page_title="Alloy Composition Analyzer",
+    page_icon="⚙️"
 )
 
-if uploaded_file is not None:
+st.title("⚙️ Alloy Composition Analyzer")
+st.write("Enter the chemical composition of the selected alloy.")
 
-    image = Image.open(uploaded_file)
+# Alloy selection
+alloy = st.selectbox(
+    "Select Alloy Grade",
+    ["Stainless Steel 304"]
+)
 
-    st.subheader("Input Image")
-    st.image(image, use_container_width=True)
+st.info(f"Selected Grade: {alloy}")
 
-    if st.button("Detect Defect"):
+# Composition input
+st.subheader("Enter Chemical Composition (%)")
 
-        results = model.predict(image, conf=0.25)
+C = st.number_input("C (%)", min_value=0.0, value=0.04, step=0.01)
+Cr = st.number_input("Cr (%)", min_value=0.0, value=18.1, step=0.1)
+Ni = st.number_input("Ni (%)", min_value=0.0, value=8.1, step=0.1)
+Mn = st.number_input("Mn (%)", min_value=0.0, value=1.0, step=0.1)
+Si = st.number_input("Si (%)", min_value=0.0, value=0.5, step=0.1)
 
-        result = results[0]
+if st.button("🔍 Analyze Composition"):
 
-        st.subheader("Detection Result")
-        st.image(result.plot(), use_container_width=True)
+    limits = {
+        "C": (0, 0.08),
+        "Cr": (18, 20),
+        "Ni": (8, 10.5),
+        "Mn": (0, 2),
+        "Si": (0, 1)
+    }
 
-        if result.boxes is not None and len(result.boxes) > 0:
+    values = {
+        "C": C,
+        "Cr": Cr,
+        "Ni": Ni,
+        "Mn": Mn,
+        "Si": Si
+    }
 
-            for box in result.boxes:
-                class_id = int(box.cls[0])
-                confidence = float(box.conf[0])
+    passed = True
 
-                name = model.names[class_id]
+    st.subheader("Analysis Result")
 
-                x1, y1, x2, y2 = map(int, box.xyxy[0])
+    for element in limits:
+        minimum, maximum = limits[element]
+        value = values[element]
 
-                st.success(
-                    f"Defect: {name}\n\n"
-                    f"Confidence: {confidence*100:.2f}%\n\n"
-                    f"Location: ({x1}, {y1}) to ({x2}, {y2})"
-                )
-
+        if minimum <= value <= maximum:
+            st.success(
+                f"✅ {element}: {value}% — Within range "
+                f"({minimum}–{maximum}%)"
+            )
         else:
-            st.info("No defect detected.")
+            st.error(
+                f"❌ {element}: {value}% — Outside range "
+                f"({minimum}–{maximum}%)"
+            )
+            passed = False
+
+    st.subheader("Final Result")
+
+    if passed:
+        st.success("✅ Composition matches Stainless Steel 304")
+    else:
+        st.warning("⚠️ Composition does not fully match Stainless Steel 304")
+
+st.caption(
+    "Screening tool only. Exact composition limits depend on the applicable "
+    "material standard and product specification."
+)
