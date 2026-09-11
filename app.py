@@ -10,6 +10,11 @@ st.set_page_config(
     page_icon="⚙️",
     layout="wide"
 )
+
+# =========================================================
+# HEADER
+# =========================================================
+
 st.title("⚙️ Alloy Composition Analyzer")
 
 st.markdown("""
@@ -18,10 +23,10 @@ st.markdown("""
 """)
 
 st.write(
-    "Select a material type and grade, enter the chemical composition, "
-    "then click Analyze."
+    "Enter the chemical composition of an unknown alloy sample. "
+    "The analyzer compares it with the available grades and identifies "
+    "the closest matching grade."
 )
-
 
 # =========================================================
 # GRADE DATABASE
@@ -261,7 +266,7 @@ STEEL = {
 
 
 # =========================================================
-# MATERIAL TYPE
+# SELECT MATERIAL TYPE
 # =========================================================
 
 material_type = st.selectbox(
@@ -276,35 +281,30 @@ else:
 
 
 # =========================================================
-# GRADE SELECTION
+# SAMPLE COMPOSITION INPUT
 # =========================================================
 
-grade = st.selectbox(
-    "📋 Select Grade",
-    list(database.keys())
+st.subheader("🧪 Enter Unknown Sample Composition (%)")
+
+st.info(
+    "Enter the measured chemical composition of your sample. "
+    "Use 0.000 for an element that is not detected or is not present."
 )
 
-limits = database[grade]
-
-st.info(f"**Selected:** {grade}")
-
-
-# =========================================================
-# INPUT SECTION
-# =========================================================
-
-st.subheader("🧪 Enter Chemical Composition (%)")
+# Get all elements available for the selected material
+all_elements = sorted(
+    set(
+        element
+        for grade_data in database.values()
+        for element in grade_data
+    )
+)
 
 values = {}
 
 columns = st.columns(3)
 
-for index, (element, (minimum, maximum)) in enumerate(limits.items()):
-
-    if minimum == maximum:
-        default = minimum
-    else:
-        default = (minimum + maximum) / 2
+for index, element in enumerate(all_elements):
 
     with columns[index % 3]:
 
@@ -312,61 +312,227 @@ for index, (element, (minimum, maximum)) in enumerate(limits.items()):
             f"{element} (%)",
             min_value=0.0,
             max_value=100.0,
-            value=float(default),
+            value=0.0,
             step=0.001,
             format="%.3f",
-            key=f"{material_type}_{grade}_{element}"
+            key=f"{material_type}_{element}"
         )
 
 
 # =========================================================
-# ANALYSIS
+# ANALYSIS FUNCTION
+# =========================================================
+
+def calculate_grade_match(sample, grade_limits):
+
+    scores = []
+
+    for element, sample_value in sample.items():
+
+        # Ignore elements that were not entered/detected
+        if sample_value == 0:
+            continue
+
+        # If the element is not part of the grade,
+        # it is considered a mismatch.
+        if element not in grade_limits:
+            scores.append(0.0)
+            continue
+
+        minimum, maximum = grade_limits[element]
+
+        # Perfect match if value is inside the allowed range
+        if minimum <= sample_value <= maximum:
+            scores.append(1.0)
+
+        else:
+            # Calculate distance from the acceptable range
+            if sample_value < minimum:
+                distance = minimum - sample_value
+            else:
+                distance = sample_value - maximum
+
+            # Avoid division by zero
+            range_width = max(maximum - minimum, 0.001)
+
+            penalty = distance / range_width
+
+            # Convert distance into a score
+            score = max(0.0, 1.0 - penalty)
+
+            scores.append(score)
+
+    if not scores:
+        return 0.0
+
+    return sum(scores) / len(scores)
+
+
+# =========================================================
+# ANALYZE BUTTON
 # =========================================================
 
 if st.button("🔍 Analyze Composition", type="primary"):
 
-    results = []
-    passed = True
+    # Check whether the user entered any composition
+    entered_elements = {
+        element: value
+        for element, value in values.items()
+        if value > 0
+    }
 
-    st.subheader("📊 Analysis Result")
+    if not entered_elements:
 
-    for element, (minimum, maximum) in limits.items():
+        st.warning(
+            "⚠️ Please enter the measured chemical composition "
+            "of the sample before analysis."
+        )
 
-        value = values[element]
+    else:
 
-        if minimum <= value <= maximum:
+        # -------------------------------------------------
+        # Compare sample with every grade
+        # -------------------------------------------------
 
-            status = "PASS"
-            results.append(
-                f"✅ **{element}**: {value:.3f}% — "
-                f"Within range ({minimum:.3f}–{maximum:.3f}%)"
+        grade_scores = []
+
+        for grade_name, grade_limits in database.items():
+
+            score = calculate_grade_match(
+                entered_elements,
+                grade_limits
+            )
+
+            grade_scores.append(
+                (grade_name, score)
+            )
+
+        # Sort grades from highest to lowest match
+        grade_scores.sort(
+            key=lambda x: x[1],
+            reverse=True
+        )
+
+        best_grade = grade_scores[0][0]
+        best_score = grade_scores[0][1] * 100
+
+        best_limits = database[best_grade]
+
+        # -------------------------------------------------
+        # RESULT
+        # -------------------------------------------------
+
+        st.divider()
+        st.subheader("📊 Analysis Result")
+
+        if best_score >= 80:
+
+            st.success(
+                f"🎯 **Most Likely Grade: {best_grade}**"
+            )
+
+        elif best_score >= 60:
+
+            st.warning(
+                f"⚠️ **Possible Grade: {best_grade}**"
             )
 
         else:
 
-            status = "FAIL"
-            passed = False
-
-            results.append(
-                f"❌ **{element}**: {value:.3f}% — "
-                f"Outside range ({minimum:.3f}–{maximum:.3f}%)"
+            st.error(
+                f"❌ **No strong grade match found**"
             )
 
-    for result in results:
-        st.write(result)
-
-    st.divider()
-
-    if passed:
-        st.success(
-            f"🎉 PASS — The entered composition matches the "
-            f"screening ranges for **{grade}**."
+        st.metric(
+            "Matching Score",
+            f"{best_score:.1f}%"
         )
-    else:
-        st.error(
-            f"⚠️ FAIL — The entered composition does not fully "
-            f"match the screening ranges for **{grade}**."
+
+        # -------------------------------------------------
+        # ELEMENT-WISE ANALYSIS
+        # -------------------------------------------------
+
+        st.subheader(
+            f"🔬 Element-wise Comparison — {best_grade}"
         )
+
+        passed = 0
+        failed = 0
+
+        for element, sample_value in entered_elements.items():
+
+            if element not in best_limits:
+
+                st.error(
+                    f"❌ **{element}**: {sample_value:.3f}% — "
+                    f"Element is not specified for {best_grade}"
+                )
+
+                failed += 1
+                continue
+
+            minimum, maximum = best_limits[element]
+
+            if minimum <= sample_value <= maximum:
+
+                st.success(
+                    f"✅ **{element}**: {sample_value:.3f}% — "
+                    f"Within range "
+                    f"({minimum:.3f}–{maximum:.3f}%)"
+                )
+
+                passed += 1
+
+            else:
+
+                st.error(
+                    f"❌ **{element}**: {sample_value:.3f}% — "
+                    f"Outside range "
+                    f"({minimum:.3f}–{maximum:.3f}%)"
+                )
+
+                failed += 1
+
+        # -------------------------------------------------
+        # FINAL DECISION
+        # -------------------------------------------------
+
+        st.divider()
+
+        if failed == 0 and best_score >= 80:
+
+            st.success(
+                f"🎉 **PASS — The sample composition is "
+                f"consistent with {best_grade}.**"
+            )
+
+        elif best_score >= 60:
+
+            st.warning(
+                f"⚠️ **REVIEW REQUIRED — {best_grade} is the "
+                f"closest match, but the composition should be "
+                f"verified against the applicable material standard.**"
+            )
+
+        else:
+
+            st.error(
+                "❌ **FAIL — The sample does not show a strong "
+                "match with the available grades.**"
+            )
+
+        # -------------------------------------------------
+        # OTHER CLOSE MATCHES
+        # -------------------------------------------------
+
+        st.subheader("📋 Other Possible Grades")
+
+        for grade_name, score in grade_scores[1:4]:
+
+            st.write(
+                f"• **{grade_name}** — "
+                f"{score * 100:.1f}% match"
+            )
 
 
 # =========================================================
