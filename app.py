@@ -14,7 +14,7 @@ st.title("⚙️ Alloy Composition Analyzer")
 
 st.markdown("""
 **Developed by:** Subham Sahu  
-**B.Tech 4th Year | Metallurgical & Materials Engineering | IGIT Sarang**
+**B.Tech - 4th Year | Metallurgical & Materials Engineering | IGIT , Sarang**
 """)
 
 st.write(
